@@ -6,6 +6,7 @@
 //
 
 import UIKit
+import CoreLocation
 
 class MainViewController: UIViewController, UITabBarDelegate, UITableViewDelegate, UITableViewDataSource {
 
@@ -14,18 +15,7 @@ class MainViewController: UIViewController, UITabBarDelegate, UITableViewDelegat
     var forecastType = ForecastType.dailyForecast
        
     //Outlets for current weather description
-    @IBOutlet var currentWeatherView: UIView!
-    @IBOutlet var currentWeatherDateLabel: UILabel!
-    @IBOutlet var currentWeatherLocationButton: UIButton!
-    @IBOutlet var currentWeatherLocationLabel: UILabel!
-    @IBOutlet var currentWeatherDescriptionLabel: UILabel!
-    @IBOutlet var currentWeatherIconImageView: UIImageView!
-    @IBOutlet var currentWeatherTemperatureLabel: UILabel!
-    @IBOutlet var currentWeatherFeelsLikeTempratureLabel: UILabel!
-    @IBOutlet var currentWeatherUVIndexLabel: UILabel!
-    @IBOutlet var currentWeatherHumidityLabel: UILabel!
-    @IBOutlet var currentWeatherWindSpeedLabel: UILabel!
-    @IBOutlet var currentWeatherWindDirectionLabel: UILabel!
+    @IBOutlet var currentWeatherView: CurrentWeatherView!
     
 //TabBar Items
     @IBOutlet var forecastTabBar: UITabBar!
@@ -37,12 +27,9 @@ class MainViewController: UIViewController, UITabBarDelegate, UITableViewDelegat
     var weatherMAnager = WeatherApiManager()
 
     var weatherData:CityWeather?
-    
-    
-    //Save/Update button outlets
-    @IBOutlet var saveAsFavoriteButton: UIButton!
-    @IBOutlet var updateWeatherButton: UIButton!
-    
+    var locationInUseForWeather: CLLocation?
+    var locationNameString: String = ""
+    var usingSavedLocation: Bool = false
     
     //Spinner view variable
     var spinner = UIActivityIndicatorView()
@@ -50,52 +37,59 @@ class MainViewController: UIViewController, UITabBarDelegate, UITableViewDelegat
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        // Do any additional setup after loading the view.
         
         //Setting up the table view and tab bar delegates
-        forecastTableView.delegate = self
-        forecastTableView.dataSource = self
+         forecastTableView.delegate = self
+         forecastTableView.dataSource = self
+         
+         forecastTabBar.delegate = self
+         forecastTabBar.selectedItem = dailyTabBarItem
+         
+         self.currentWeatherView.saveAsFavoriteButton.isHidden = true
+         self.currentWeatherView.updateWeatherButton.isHidden = true
         
-        forecastTabBar.delegate = self
-        forecastTabBar.selectedItem = dailyTabBarItem
+        //Fetch saved weather and update views
+        usingSavedLocation = reloadSavedWeather()
         
-        saveAsFavoriteButton.isHidden = true
-        updateWeatherButton.isHidden = true
-        
-        //Fetch weather and update UI
-        startLoadingWeather()
-
-    }
-
-    
-    func startLoadingWeather(){
-      
-        
-        //If a weather is already saved as favorite load that onto current screen, else call the api
-        if let savedWeather = WeatherStorage.readFavoriteWeatherFromDisk(){
-            
-            self.weatherData = savedWeather
-            self.updateCurrentWeatherView(weather: savedWeather)
-            updateWeatherButton.isHidden = false
-            saveAsFavoriteButton.isHidden = true
-            //Update forecast table
-            self.forecastTableView.reloadData()
-            
-            
-        } else {
-            //default/temporary location for the weather api
-            let cityLocation = Location(latitude: -33.8679, longitude: 151.2073)
-            getWeatherForLocation(location: cityLocation)
+        //if there's no saved location: use default location/Sydney , call weather API and update views
+        if !usingSavedLocation{
+            self.locationInUseForWeather = ChangeLocationViewController.nearbyLocationNamesDictionary["Sydney, Australia"]
+            getWeatherForLocation(location: self.locationInUseForWeather!)
         }
         
     }
+ //MARK:- Weather loading methods
+    func reloadSavedWeather()->Bool{
+      
+        //If a weather is already saved as favorite load that onto current screen
+        if let savedWeather = WeatherStorage.readFavoriteWeatherFromDisk(){
+            
+            self.weatherData = savedWeather
+            
+            //Set current user location from the saved weather
+            guard let latitude = savedWeather.lat, let longitude = savedWeather.lon else {return false}
+            self.locationInUseForWeather = CLLocation(latitude: Double(latitude), longitude: Double(longitude))
+            
+            //Change buttons UPDATE-> not Hidden because old weather is displayed, SAVE-> hidden bcz weather is already saved
+            self.currentWeatherView.updateWeatherButton.isHidden = false
+            self.currentWeatherView.saveAsFavoriteButton.isHidden = true
+            
+            //Update forecast table and current weather view
+            self.updateCurrentWeatherView()
+            self.forecastTableView.reloadData()
+            
+            return true
+        }
+          
+        return false
+    }
     
-    func getWeatherForLocation(location: Location){
+    func getWeatherForLocation(location: CLLocation){
         
         //start animation while data is fetching
             showOpaqueView()
             showSpinner()
-       
+        
         weatherMAnager.getWeatherForCity(city: location, completion_Handler: {weatherData in
             DispatchQueue.main.async {
                 
@@ -103,47 +97,74 @@ class MainViewController: UIViewController, UITabBarDelegate, UITableViewDelegat
                 
                 //Map weather object on controller's data sources for table view
                 self.weatherData = weatherData
-                self.saveAsFavoriteButton.isHidden = false
-                self.updateWeatherButton.isHidden = true
                 
-                self.updateCurrentWeatherView(weather: weatherData)
+                //Change buttons UPDATE-> Hidden because the weather is recent, SAVE->not hidden bcz new weather is fetched which is not on disk
+                self.currentWeatherView.saveAsFavoriteButton.isHidden = false
+                self.currentWeatherView.updateWeatherButton.isHidden = true
                 
-                //Update forecast table
+                
+                //Update forecast table and current weather views
+                self.updateCurrentWeatherView()
                 self.forecastTableView.reloadData()
                 
                 //hide animation
                 self.hideSpinnerAndOpacity()
-                
-                
             }
         })
     }
-    
-    func updateCurrentWeatherView(weather :CityWeather){
+  //MARK:- UI update methods
+    func updateCurrentWeatherView(){
+        
+        //Unwrapping api response optionals
+        guard let weather = self.weatherData,
+              let currentWeatherdata = weather.current,
+              let date = currentWeatherdata.dt,
+              let wind_deg = currentWeatherdata.wind_deg,
+              let wind_speed = currentWeatherdata.wind_speed,
+              let humidity = currentWeatherdata.humidity,
+              let uvi = currentWeatherdata.uvi,
+              let temp = currentWeatherdata.temp,
+              let feels_like = currentWeatherdata.feels_like,
+              let weatherArray = currentWeatherdata.weather,
+              let weather = weatherArray.first,
+              let icon = weather.icon,
+              let description = weather.description  else{return}
         
         
-         let currentWeatherdata = weather.current
-        
-        weatherMAnager.fetchImage(icon: currentWeatherdata.weather.first!.icon, completionHandler: {image in
-            self.currentWeatherIconImageView.image = image
-            //Stretched backgroundImage
-           // self.currentWeatherView.layer.contents = image.cgImage
+        //fetching image from api
+        weatherMAnager.fetchImage(icon: icon, completionHandler: {image in
+            self.currentWeatherView.currentWeatherIconImageView.image = image
         })
-        //Update all the labels with data
-        self.currentWeatherLocationLabel.text = weather.timezone
-        self.currentWeatherDescriptionLabel.text = currentWeatherdata.weather.first!.description
-        self.currentWeatherTemperatureLabel.text = "Temp: " + String( currentWeatherdata.temp) + "°"
-        self.currentWeatherFeelsLikeTempratureLabel.text = "Feels Like: " + String(currentWeatherdata.feels_like) + "°"
-        self.currentWeatherUVIndexLabel.text = "UV Index: " + String(currentWeatherdata.uvi)
-        self.currentWeatherHumidityLabel.text = "Humidity: " + String(currentWeatherdata.humidity)
-        self.currentWeatherWindSpeedLabel.text = "Wind Speed:: " + String(currentWeatherdata.wind_speed)
-        self.currentWeatherWindDirectionLabel.text = "Wind Direction: " + String(currentWeatherdata.wind_deg)
         
-        let date = Date(timeIntervalSince1970: TimeInterval(currentWeatherdata.dt))
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "dd MMM, yyyy"
-        let currentDate = dateFormatter.string(from: date)
-        self.currentWeatherDateLabel.text = currentDate
+        locationNameString = ChangeLocationViewController.currentLocationName(location: self.locationInUseForWeather)
+        
+        //Update all the ui labels with data
+        self.currentWeatherView.currentWeatherLocationLabel.text = locationNameString
+        self.currentWeatherView.currentWeatherDescriptionLabel.text = description
+        self.currentWeatherView.currentWeatherTemperatureLabel.text = "Temp: \(temp)°"
+        self.currentWeatherView.currentWeatherFeelsLikeTempratureLabel.text = "Feels Like: \(feels_like)°"
+        self.currentWeatherView.currentWeatherUVIndexLabel.text = "UV Index: \(uvi)"
+        self.currentWeatherView.currentWeatherHumidityLabel.text = "Humidity: \(humidity)"
+        self.currentWeatherView.currentWeatherWindSpeedLabel.text = "Wind Speed: \(wind_speed)"
+        self.currentWeatherView.currentWeatherWindDirectionLabel.text = "Wind Direction: \(wind_deg)"
+        self.currentWeatherView.currentWeatherDateLabel.text = convertTimestampToString(epoch: date, requestFrom: "view")
+    }
+    
+    
+    //MARK:-NAVIGATION
+    
+    
+    @IBAction func backToWeatherScreen(_ unwindSegue: UIStoryboardSegue) {
+   
+    }
+    
+    override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
+        
+        if segue.identifier == "chooseLocationSegue"{
+            let destinationVC = segue.destination as! ChangeLocationViewController
+            destinationVC.senderVC = self
+        }
+        
     }
     
 //MARK:- TABLEVIEW DATA SOURCE METHODS
@@ -151,49 +172,72 @@ class MainViewController: UIViewController, UITabBarDelegate, UITableViewDelegat
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         
         switch forecastType {
+        //For daily forecast return 7 cells for 7 days forecast
         case .dailyForecast:
             return 7
+        //For hourly forecast return 24 cells for 24 hour forecast
         case .hourlyForecast:
             return 24
         }
-        
     }
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
        
         let cell = tableView.dequeueReusableCell(withIdentifier: "ForecastTableViewCell", for: indexPath) as! ForecastTableViewCell
         
+        //Unwrap optionals from response
+        guard let weather = weatherData, let daily = weather.daily, let hourly = weather.hourly else {
+            return cell
+        }
+        
         switch forecastType {
         case .dailyForecast:
             do{
                 //fetch daily Forecast data and set cell ui elements with it
-                if let dailyData = weatherData?.daily[indexPath.row+1] {
+                let dailyData = daily[indexPath.row+1]
+               
+                //Unwrapping values
+                guard let timeStamp = dailyData.dt,
+                      let weatherArray = dailyData.weather,
+                      let weather = weatherArray.first,
+                      let description = weather.description,
+                      let icon = weather.icon,
+                      let temp = dailyData.temp,
+                      let maxTemp = temp.max,
+                      let minTemp = temp.min
+                else{return cell}
                    
-                    let timeStamp = dailyData.dt
-                    cell.timeOrDayLabel.text = convertTimestampToString(epoch: timeStamp)
-                    cell.weatherDescriptionLabel.text = dailyData.weather.first?.description
-                    cell.tempLabel.text = "\(Int(dailyData.temp.max))° - \(Int(dailyData.temp.min))°"
-                   weatherMAnager.fetchImage(icon: dailyData.weather.first!.icon, completionHandler: {image in
+                   // let timeStamp = dailyData.dt
+                    cell.timeOrDayLabel.text = convertTimestampToString(epoch: timeStamp, requestFrom: "cell")
+                    cell.weatherDescriptionLabel.text = description
+                    cell.tempLabel.text = "\(Int(maxTemp))° - \(Int(minTemp))°"
+                   weatherMAnager.fetchImage(icon: icon, completionHandler: {image in
                         cell.weatherIconImageView.image = image
                     })
-                }
-                
             }
         case .hourlyForecast:
             
             do{
                 //Fetch hourly forecast data and set ui elements of cell with it
-                if let hourData = weatherData?.hourly[indexPath.row+1]{
-                    let timeStamp = hourData.dt
-                    cell.timeOrDayLabel.text = convertTimestampToString(epoch: timeStamp)
-                    cell.weatherDescriptionLabel.text = hourData.weather.first?.description
-                    
-                    cell.tempLabel.text = "\(Int(hourData.temp))°"
-                    weatherMAnager.fetchImage(icon: hourData.weather.first!.icon, completionHandler: {image in
+                //fetch daily Forecast data and set cell ui elements with it
+                let hourlyData = hourly[indexPath.row+1]
+               
+                //Unwrapping values
+                guard let timeStamp = hourlyData.dt,
+                      let weatherArray = hourlyData.weather,
+                      let weather = weatherArray.first,
+                      let description = weather.description,
+                      let icon = weather.icon,
+                      let temp = hourlyData.temp
+                else{return cell}
+                
+                cell.timeOrDayLabel.text = convertTimestampToString(epoch: timeStamp, requestFrom: "cell")
+                cell.weatherDescriptionLabel.text = description
+                cell.tempLabel.text = "\(Int(temp))°"
+                weatherMAnager.fetchImage(icon: icon, completionHandler: {image in
                         cell.weatherIconImageView.image = image
-                    })
-                    
-                }
+                
+                })
             }
         }
         return cell
@@ -202,6 +246,7 @@ class MainViewController: UIViewController, UITabBarDelegate, UITableViewDelegat
 //MARK:- TABLE VIEW DELEGATE METHODS
 
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        
         tableView.deselectRow(at: indexPath, animated: true)
     }
     
@@ -218,53 +263,66 @@ func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
         print("Error")
     }
     
-    //Reload and scroll up with changed data
+    //Reload and scroll up with updated data
     forecastTableView.reloadData()
     forecastTableView.scrollToRow(at: IndexPath.init(row: 0, section: 0), at: .top, animated: true)
 
 }
 
-//MARK:- Custom methods
+//MARK:- TimeStamp conversion method
 
     //Change epoch timestamp to appropriate strings
-    func convertTimestampToString(epoch: Double)->String{
+    func convertTimestampToString(epoch: Double, requestFrom: String)->String{
        
         let date = Date(timeIntervalSince1970: TimeInterval(epoch))
         let dateFormatter = DateFormatter()
     
-        switch forecastType {
-        case .dailyForecast:
-          //  dateFormatter.dateFormat = "EEEE dd MMM, yyyy"
-            dateFormatter.dateFormat = "EEE"
-            let dayInWeek = dateFormatter.string(from: date)
-            return dayInWeek
-        case .hourlyForecast:
-            dateFormatter.dateFormat = "hh:mm aa" //AM/PM format
-            //dateFormatter.dateFormat = "HH:mm" //24HR format
-            let timeOfDay = dateFormatter.string(from: date)
-            return timeOfDay
+        //to decide on what date format to convert using string Ids
+        if requestFrom == "cell"{
+            switch forecastType {
+            case .dailyForecast:
+                //In case of daily forecast, display name of the day
+                //dateFormatter.dateFormat = "EEEE dd MMM, yyyy" //Day+date
+                dateFormatter.dateFormat = "EEE" //Short name of the day
+                let dayInWeek = dateFormatter.string(from: date)
+                return dayInWeek
+            case .hourlyForecast:
+                //In case of hourly forecast, displpay time
+                dateFormatter.dateFormat = "hh:mm aa" //AM/PM format
+                //dateFormatter.dateFormat = "HH:mm" //24HR format
+                let timeOfDay = dateFormatter.string(from: date)
+                return timeOfDay
+            }
+        }
+        else if requestFrom == "view"{
+            //Convert date
+            dateFormatter.dateFormat = "dd MMM, yyyy"
+            let currentDate = dateFormatter.string(from: date)
+            return currentDate
+        }
+        else{
+            return "nil"
         }
     }
     
-
-    @IBAction func changeLocationButtonTapped(_ sender: Any) {
-        
-        print("Change location segue")
-    }
-    
+//MARK:- Button Actions
+ 
     @IBAction func saveWeatherAsFavoriteButtonTapped(_ sender: Any) {
        
      //Save current weather data to file
        showOpaqueView()
        showSpinner()
         
+        //check if there is data to be saved
         if weatherData != nil{
              WeatherStorage.saveWeatherOnDisk(weatherData!)
 
         }
+        
+        //Show animation for 1 second while file is being saved, then change buttons
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            self.saveAsFavoriteButton.isHidden = true
-            self.updateWeatherButton.isHidden = false
+            self.currentWeatherView.saveAsFavoriteButton.isHidden = true
+            self.currentWeatherView.updateWeatherButton.isHidden = false
             self.hideSpinnerAndOpacity()
         }
         
@@ -273,19 +331,22 @@ func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
     
     @IBAction func updateWeather(_ sender: Any) {
         
-        print("Update weather for saved location")
-        
-        //Get location from saved weather
+        //Update the displayed weather for the location saved as part of favorite weather
+        /*
+        //Get location from displayed weather
         guard let latitude = weatherData?.lat, let longitude = weatherData?.lon else {
             return
         }
-        
-        let city = Location(latitude: latitude, longitude: longitude)
+         */
+        guard let city = self.locationInUseForWeather else {return}
         
         //Call weatherapi for saved location
         getWeatherForLocation(location: city)
         
     }
+       
+//MARK:- Animation methods
+    
     func showOpaqueView(){
         //Opaque view to hide screen
        // let opaqueView = UIView()
@@ -294,6 +355,7 @@ func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
         opaqueView.alpha = 0.8
         self.view.addSubview(opaqueView)
     }
+    
     func showSpinner(){
         // Spinner shown during weather api call
      //   let spinner = UIActivityIndicatorView()

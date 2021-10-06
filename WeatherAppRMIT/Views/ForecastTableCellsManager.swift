@@ -18,7 +18,7 @@ enum ForecastType: String{
 
 class ForecastTableViewCell: UITableViewCell {
     
-    
+    //Fprecast Data outlets
     @IBOutlet var weatherDescriptionLabel: UILabel!
     @IBOutlet var timeOrDayLabel: UILabel!
     @IBOutlet var tempLabel: UILabel!

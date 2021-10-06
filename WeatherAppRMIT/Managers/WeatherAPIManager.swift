@@ -7,6 +7,7 @@
 
 import Foundation
 import UIKit
+import CoreLocation
 
 struct WeatherApiManager {
     
@@ -20,10 +21,10 @@ struct WeatherApiManager {
    private let base_url: String = "https://api.openweathermap.org/data/2.5/onecall?exclude=minutely&units=metric&appid=190808429e6e59d2a9311582cde0dddb"
 
     
-    mutating func getWeatherForCity(city: Location, completion_Handler: @escaping(CityWeather)->Void){
+    mutating func getWeatherForCity(city: CLLocation, completion_Handler: @escaping(CityWeather)->Void){
         
         //Create string with city info attached to base url
-        let urlString = base_url+"&lat=\(city.latitude)&lon=\(city.longitude)"
+        let urlString = base_url+"&lat=\(city.coordinate.latitude)&lon=\(city.coordinate.longitude)"
         
         //create url from string
         guard let url = URL(string: urlString) else { return }
@@ -60,9 +61,10 @@ struct WeatherApiManager {
             if let data = data{
     
                 let decodedWeatherForCity = try? JSONDecoder().decode(CityWeather.self, from: data)
-               print(decodedWeatherForCity!)
+            //   print(decodedWeatherForCity!)
                 
                 guard let weatherData = decodedWeatherForCity else { return }
+                //print(weatherData.timezone!)
                 completionHandler(weatherData)
                 
             }
@@ -74,6 +76,7 @@ struct WeatherApiManager {
    }
     
     
+    //Get image from the url
     func fetchImage(icon: String, completionHandler: @escaping(UIImage)->Void){
       
         // Create URL

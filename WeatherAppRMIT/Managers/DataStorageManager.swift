@@ -26,7 +26,6 @@ class WeatherStorage{
         // create File URL
         let fileURL = WeatherStorage.weatherFileURL
 
-    
         //Encode and write to file
         do {
             let data = try encoder.encode(weatherToSave)
