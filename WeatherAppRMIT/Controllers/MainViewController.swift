@@ -28,8 +28,6 @@ class MainViewController: UIViewController, UITabBarDelegate, UITableViewDelegat
 
     var weatherData:CityWeather?
     var locationInUseForWeather: CLLocation?
-    var locationNameString: String = ""
-    var usingSavedLocation: Bool = false
     
     //Spinner view variable
     var spinner = UIActivityIndicatorView()
@@ -49,10 +47,9 @@ class MainViewController: UIViewController, UITabBarDelegate, UITableViewDelegat
          self.currentWeatherView.updateWeatherButton.isHidden = true
         
         //Fetch saved weather and update views
-        usingSavedLocation = reloadSavedWeather()
-        
+        if !reloadSavedWeather()
+        {
         //if there's no saved location: use default location/Sydney , call weather API and update views
-        if !usingSavedLocation{
             self.locationInUseForWeather = ChangeLocationViewController.nearbyLocationNamesDictionary["Sydney, Australia"]
             getWeatherForLocation(location: self.locationInUseForWeather!)
         }
@@ -136,7 +133,7 @@ class MainViewController: UIViewController, UITabBarDelegate, UITableViewDelegat
             self.currentWeatherView.currentWeatherIconImageView.image = image
         })
         
-        locationNameString = ChangeLocationViewController.currentLocationName(location: self.locationInUseForWeather)
+        let locationNameString = ChangeLocationViewController.getCurrentLocationNameString(location: self.locationInUseForWeather)
         
         //Update all the ui labels with data
         self.currentWeatherView.currentWeatherLocationLabel.text = locationNameString
@@ -147,7 +144,7 @@ class MainViewController: UIViewController, UITabBarDelegate, UITableViewDelegat
         self.currentWeatherView.currentWeatherHumidityLabel.text = "Humidity: \(humidity)"
         self.currentWeatherView.currentWeatherWindSpeedLabel.text = "Wind Speed: \(wind_speed)"
         self.currentWeatherView.currentWeatherWindDirectionLabel.text = "Wind Direction: \(wind_deg)"
-        self.currentWeatherView.currentWeatherDateLabel.text = convertTimestampToString(epoch: date, requestFrom: "view")
+        self.currentWeatherView.currentWeatherDateLabel.text = convertTimestampToString(epoch: date, requestingViewId: "view")
     }
     
     
@@ -208,7 +205,7 @@ class MainViewController: UIViewController, UITabBarDelegate, UITableViewDelegat
                 else{return cell}
                    
                    // let timeStamp = dailyData.dt
-                    cell.timeOrDayLabel.text = convertTimestampToString(epoch: timeStamp, requestFrom: "cell")
+                    cell.timeOrDayLabel.text = convertTimestampToString(epoch: timeStamp, requestingViewId: "cell")
                     cell.weatherDescriptionLabel.text = description
                     cell.tempLabel.text = "\(Int(maxTemp))° - \(Int(minTemp))°"
                    weatherMAnager.fetchImage(icon: icon, completionHandler: {image in
@@ -231,7 +228,7 @@ class MainViewController: UIViewController, UITabBarDelegate, UITableViewDelegat
                       let temp = hourlyData.temp
                 else{return cell}
                 
-                cell.timeOrDayLabel.text = convertTimestampToString(epoch: timeStamp, requestFrom: "cell")
+                cell.timeOrDayLabel.text = convertTimestampToString(epoch: timeStamp, requestingViewId: "cell")
                 cell.weatherDescriptionLabel.text = description
                 cell.tempLabel.text = "\(Int(temp))°"
                 weatherMAnager.fetchImage(icon: icon, completionHandler: {image in
@@ -272,13 +269,13 @@ func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
 //MARK:- TimeStamp conversion method
 
     //Change epoch timestamp to appropriate strings
-    func convertTimestampToString(epoch: Double, requestFrom: String)->String{
+    func convertTimestampToString(epoch: Double, requestingViewId: String)->String{
        
         let date = Date(timeIntervalSince1970: TimeInterval(epoch))
         let dateFormatter = DateFormatter()
     
         //to decide on what date format to convert using string Ids
-        if requestFrom == "cell"{
+        if requestingViewId == "cell"{
             switch forecastType {
             case .dailyForecast:
                 //In case of daily forecast, display name of the day
@@ -294,8 +291,8 @@ func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
                 return timeOfDay
             }
         }
-        else if requestFrom == "view"{
-            //Convert date
+        else if requestingViewId == "view"{
+            //Convert to date
             dateFormatter.dateFormat = "dd MMM, yyyy"
             let currentDate = dateFormatter.string(from: date)
             return currentDate
@@ -331,13 +328,7 @@ func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
     
     @IBAction func updateWeather(_ sender: Any) {
         
-        //Update the displayed weather for the location saved as part of favorite weather
-        /*
-        //Get location from displayed weather
-        guard let latitude = weatherData?.lat, let longitude = weatherData?.lon else {
-            return
-        }
-         */
+        //unwrap optional locationcinto cllocation first
         guard let city = self.locationInUseForWeather else {return}
         
         //Call weatherapi for saved location
@@ -348,8 +339,8 @@ func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
 //MARK:- Animation methods
     
     func showOpaqueView(){
+        
         //Opaque view to hide screen
-       // let opaqueView = UIView()
         opaqueView.frame = self.view.frame
         opaqueView.backgroundColor = .white
         opaqueView.alpha = 0.8
@@ -357,8 +348,8 @@ func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
     }
     
     func showSpinner(){
+        
         // Spinner shown during weather api call
-     //   let spinner = UIActivityIndicatorView()
         spinner.style = UIActivityIndicatorView.Style.medium
         spinner.frame = CGRect(x: 0, y: 0, width: 30, height: 30)
         spinner.center = self.view.center
@@ -367,6 +358,7 @@ func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
     }
     
     func hideSpinnerAndOpacity(){
+        
         //Stop spinner after data and ui updates
         spinner.stopAnimating()
         spinner.removeFromSuperview()

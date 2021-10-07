@@ -70,15 +70,13 @@
 		D42E701C26FC585A00FB5405 /* WeatherAppRMIT */ = {
 			isa = PBXGroup;
 			children = (
+				D42E702B26FC585B00FB5405 /* Info.plist */,
+				D4B61266270D92FC00DB2E2C /* resources */,
 				D4B6125A2702EAEF00DB2E2C /* Delegates */,
-				D42E702326FC585A00FB5405 /* Main.storyboard */,
 				D4B612582702EAAC00DB2E2C /* Views */,
 				D4B6123B2701E0FF00DB2E2C /* Models */,
 				D4B6126327094C0400DB2E2C /* Managers */,
 				D4B612592702EAB100DB2E2C /* Controllers */,
-				D42E702626FC585B00FB5405 /* Assets.xcassets */,
-				D42E702826FC585B00FB5405 /* LaunchScreen.storyboard */,
-				D42E702B26FC585B00FB5405 /* Info.plist */,
 			);
 			path = WeatherAppRMIT;
 			sourceTree = "<group>";
@@ -127,6 +125,16 @@
 				D4B6125D27057AE700DB2E2C /* DataStorageManager.swift */,
 			);
 			path = Managers;
+			sourceTree = "<group>";
+		};
+		D4B61266270D92FC00DB2E2C /* resources */ = {
+			isa = PBXGroup;
+			children = (
+				D42E702826FC585B00FB5405 /* LaunchScreen.storyboard */,
+				D42E702326FC585A00FB5405 /* Main.storyboard */,
+				D42E702626FC585B00FB5405 /* Assets.xcassets */,
+			);
+			path = resources;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */

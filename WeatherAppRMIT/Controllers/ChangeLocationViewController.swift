@@ -51,11 +51,11 @@ class ChangeLocationViewController: UIViewController, UITableViewDelegate, UITab
         //Get all city names
         self.locationNames = Array(ChangeLocationViewController.nearbyLocationNamesDictionary.keys)
         
-        self.currentLocationLabel.text = ChangeLocationViewController.currentLocationName(location: self.senderVC.locationInUseForWeather)
+        self.currentLocationLabel.text = ChangeLocationViewController.getCurrentLocationNameString(location: self.senderVC.locationInUseForWeather)
        
     }
     
-   static func currentLocationName(location: CLLocation?)->String{
+   static func getCurrentLocationNameString(location: CLLocation?)->String{
         
         var nameString:String = "no name"
         
